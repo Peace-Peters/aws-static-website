@@ -1,4 +1,6 @@
-output "website_url" {
-    description = "My website URL"
-    value = aws_s3_bucket_website_configuration.web-config.website_endpoint
+
+# Updated output.tf file content
+output "cloudfront_url" {
+  description = "CloudFront Distribution URL"
+  value       = aws_cloudfront_distribution.cloudfront_distribution.domain_name
 }

@@ -1,22 +1,20 @@
-# AWS S3 bucket resource
 
-resource "aws_s3_bucket" "demo-bucket" {
+# AWS S3 bucket resource
+resource "aws_s3_bucket" "hello_world_bucket" {
   bucket = var.my_bucket_name # Name of the S3 bucket
 }
 
-
 # AWS S3 bucket Ownership Control
-resource "aws_s3_bucket_ownership_controls" "example" {
-  bucket = aws_s3_bucket.demo-bucket.id
+resource "aws_s3_bucket_ownership_controls" "ownership_controls" {
+  bucket = aws_s3_bucket.hello_world_bucket.id
+
   rule {
     object_ownership = "BucketOwnerPreferred"
   }
 }
-
-
 # AWS S3 Bucket Public Access Block
-resource "aws_s3_bucket_public_access_block" "example" {
-  bucket = aws_s3_bucket.demo-bucket.id
+resource "aws_s3_bucket_public_access_block" "public_access_block" {
+  bucket = aws_s3_bucket.hello_world_bucket.id
 
   block_public_acls       = false
   block_public_policy     = false
@@ -24,61 +22,51 @@ resource "aws_s3_bucket_public_access_block" "example" {
   restrict_public_buckets = false
 }
 
-
 # AWS S3 Bucket ACL Resource
-resource "aws_s3_bucket_acl" "example" {
+resource "aws_s3_bucket_acl" "bucket_acl" {
   depends_on = [
-    aws_s3_bucket_ownership_controls.example,
-    aws_s3_bucket_public_access_block.example,
+    aws_s3_bucket_ownership_controls.ownership_controls,
+    aws_s3_bucket_public_access_block.public_access_block,
   ]
 
-  bucket = aws_s3_bucket.demo-bucket.id
+  bucket = aws_s3_bucket.hello_world_bucket.id
   acl    = "public-read"
 }
 
-
 # AWS S3 Bucket Policy
-resource "aws_s3_bucket_policy" "host_bucket_policy" {
-  bucket =  aws_s3_bucket.demo-bucket.id # ID of the S3 bucket
+resource "aws_s3_bucket_policy" "public_read_policy" {
+  bucket = aws_s3_bucket.hello_world_bucket.id
 
-  # Policy JSON for allowing public read access
   policy = jsonencode({
-    "Version" : "2012-10-17",
-    "Statement" : [
+    "Version": "2012-10-17",
+    "Statement": [
       {
-        "Effect" : "Allow",
-        "Principal" : "*",
-        "Action" : "s3:GetObject",
+        "Effect": "Allow",
+        "Principal": "*",
+        "Action": "s3:GetObject",
         "Resource": "arn:aws:s3:::${var.my_bucket_name}/*"
       }
     ]
   })
 }
-
-
 # Template File
 module "template_files" {
-    source = "hashicorp/dir/template"
-
-    base_dir = "${path.module}/website"
+  source   = "hashicorp/dir/template"
+  base_dir = "${path.module}/website"
 }
 
-# https://registry.terraform.io/modules/hashicorp/dir/template/latest
-
 # Website Configuration
-resource "aws_s3_bucket_website_configuration" "web-config" {
-  bucket =    aws_s3_bucket.demo-bucket.id  # ID of the S3 bucket
+resource "aws_s3_bucket_website_configuration" "website_configuration" {
+  bucket = aws_s3_bucket.hello_world_bucket.id
 
-  # Configuration for the index document
   index_document {
     suffix = "index.html"
   }
 }
 
-
 # AWS S3 object resource for hosting bucket files
-resource "aws_s3_object" "Bucket_files" {
-  bucket =  aws_s3_bucket.demo-bucket.id  # ID of the S3 bucket
+resource "aws_s3_object" "bucket_files" {
+  bucket = aws_s3_bucket.hello_world_bucket.id
 
   for_each     = module.template_files.files
   key          = each.key
@@ -87,30 +75,29 @@ resource "aws_s3_object" "Bucket_files" {
   source  = each.value.source_path
   content = each.value.content
 
-  # ETag of the S3 object
   etag = each.value.digests.md5
 }
 
 # AWS CloudFront Distribution
-resource "aws_cloudfront_distribution" "phw_cdn" {
+resource "aws_cloudfront_distribution" "cloudfront_distribution" {
   origin {
-    domain_name = aws_s3_bucket.demo-bucket.bucket_regional_domain_name
-    origin_id   = "S3-${aws_s3_bucket.demo-bucket.id}"
+    domain_name = aws_s3_bucket.hello_world_bucket.bucket_regional_domain_name
+    origin_id   = "S3-${aws_s3_bucket.hello_world_bucket.id}"
 
     s3_origin_config {
-      origin_access_identity = aws_cloudfront_origin_access_identity.oai.cloudfront_access_identity_path
+      origin_access_identity = aws_cloudfront_origin_access_identity.origin_access.cloudfront_access_identity_path
     }
   }
 
   enabled             = true
   is_ipv6_enabled     = true
-  comment             = "CloudFront distribution for S3 bucket hosting website"
+  comment             = "CloudFront distribution for my hello world bucket website"
   default_root_object = "index.html"
 
   default_cache_behavior {
     allowed_methods  = ["GET", "HEAD"]
     cached_methods   = ["GET", "HEAD"]
-    target_origin_id = "S3-${aws_s3_bucket.demo-bucket.id}"
+    target_origin_id = "S3-${aws_s3_bucket.hello_world_bucket.id}"
 
     forwarded_values {
       query_string = false
@@ -137,13 +124,13 @@ resource "aws_cloudfront_distribution" "phw_cdn" {
 }
 
 # CloudFront Origin Access Identity
-resource "aws_cloudfront_origin_access_identity" "oai" {
+resource "aws_cloudfront_origin_access_identity" "origin_access" {
   comment = "OAI for S3 bucket access"
 }
 
-# Update S3 Bucket Policy to Allow CloudFront Access
-resource "aws_s3_bucket_policy" "cloudfront_access" {
-  bucket = aws_s3_bucket.demo-bucket.id
+# Updated S3 Bucket Policy to Allow CloudFront Access
+resource "aws_s3_bucket_policy" "cloudfront_access_policy" {
+  bucket = aws_s3_bucket.hello_world_bucket.id
 
   policy = jsonencode({
     "Version": "2012-10-17",
@@ -151,12 +138,11 @@ resource "aws_s3_bucket_policy" "cloudfront_access" {
       {
         "Effect": "Allow",
         "Principal": {
-          "AWS": aws_cloudfront_origin_access_identity.oai.iam_arn
+          "AWS": aws_cloudfront_origin_access_identity.origin_access.iam_arn
         },
         "Action": "s3:GetObject",
-        "Resource": "arn:aws:s3:::${aws_s3_bucket.demo-bucket.id}/*"
+        "Resource": "arn:aws:s3:::${aws_s3_bucket.hello_world_bucket.id}/*"
       }
     ]
   })
 }
-
